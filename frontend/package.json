@@ -13,7 +13,6 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@pythnetwork/pyth-evm-js": "^1.85.0",
     "@pythnetwork/pyth-sdk-solidity": "^4.2.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-avatar": "^1.1.10",
