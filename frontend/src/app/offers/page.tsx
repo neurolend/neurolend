@@ -562,8 +562,8 @@ export default function OffersPage() {
                                     loan.priceChangeIndicator.isPositive
                                       ? "bg-green-50 text-green-700 border-green-200"
                                       : loan.loanTokenPriceDirection === "down"
-                                      ? "bg-red-50 text-red-700 border-red-200"
-                                      : "bg-gray-50 text-gray-700 border-gray-200"
+                                        ? "bg-red-50 text-red-700 border-red-200"
+                                        : "bg-gray-50 text-gray-700 border-gray-200"
                                   }`}
                                 >
                                   {loan.loanTokenPriceDirection === "up" && (
@@ -717,9 +717,9 @@ export default function OffersPage() {
                               selectedLoanId === loan.id
                                 ? "Approving..."
                                 : transactionState.step === "accepting" &&
-                                  selectedLoanId === loan.id
-                                ? "Accepting..."
-                                : "Accept"}
+                                    selectedLoanId === loan.id
+                                  ? "Accepting..."
+                                  : "Accept"}
                             </Button>
                           )}
                         </TableCell>

@@ -93,19 +93,21 @@ export default function MyLoansPage() {
     error: restError,
     refresh: refreshRestData,
   } = useRestMyLoansData();
-  
+
   // Keep subgraph as fallback for now
   const {
     loans: subgraphLoans,
     loading: isLoadingSubgraph,
     error: subgraphError,
   } = useAllLoansWithStatus();
-  
+
   // Use REST data if available, otherwise fallback to subgraph
   const finalLoans = allLoans.length > 0 ? allLoans : subgraphLoans;
-  const finalLoading = isLoadingRest || (allLoans.length === 0 && isLoadingSubgraph);
-  const finalError = restError || (allLoans.length === 0 ? subgraphError : null);
-  
+  const finalLoading =
+    isLoadingRest || (allLoans.length === 0 && isLoadingSubgraph);
+  const finalError =
+    restError || (allLoans.length === 0 ? subgraphError : null);
+
   console.log("MyLoans - REST loans:", allLoans);
   console.log("MyLoans - Subgraph loans:", subgraphLoans);
   console.log("MyLoans - Final loans:", finalLoans);
@@ -623,15 +625,11 @@ export default function MyLoansPage() {
           onClick={refreshAllData}
           variant="outline"
           disabled={
-            finalLoading ||
-            isLoadingLenderPrices ||
-            isLoadingBorrowerPrices
+            finalLoading || isLoadingLenderPrices || isLoadingBorrowerPrices
           }
           className="btn-premium"
         >
-          {finalLoading ||
-          isLoadingLenderPrices ||
-          isLoadingBorrowerPrices ? (
+          {finalLoading || isLoadingLenderPrices || isLoadingBorrowerPrices ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -795,9 +793,7 @@ export default function MyLoansPage() {
 
       {/* Stuck Loading Message */}
       {showStuckMessage &&
-        (finalLoading ||
-          isLoadingLenderPrices ||
-          isLoadingBorrowerPrices) && (
+        (finalLoading || isLoadingLenderPrices || isLoadingBorrowerPrices) && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
             <Card className="w-96 mx-4">
               <CardContent className="pt-6 text-center">

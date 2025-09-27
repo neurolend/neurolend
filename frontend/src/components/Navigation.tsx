@@ -31,7 +31,7 @@ export function Navigation() {
   const { isConnected, address } = useP2PLending();
   const {
     pendingRewards,
-    formatDreamAmount,
+    formatNeuroAmount,
     rewardsSystemAvailable,
     canClaimRewards,
   } = useRewards();
@@ -168,7 +168,7 @@ export function Navigation() {
                         href={"/rewards"}
                         className="text-xs font-medium  text-purple-700 dark:text-purple-300"
                       >
-                        {formatDreamAmount(pendingRewards).slice(0, 6)} DREAM
+                        {formatNeuroAmount(pendingRewards).slice(0, 6)} NEURO
                       </Link>
                       {/* {canClaimRewards && (
                         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />

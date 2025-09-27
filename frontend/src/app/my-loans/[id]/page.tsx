@@ -26,7 +26,6 @@ import {
   useLivePriceComparison,
   LoanWithPriceComparison,
 } from "@/hooks/useLivePriceComparison";
-import { LoanHealthManager } from "@/components/LoanHealthManager";
 import { PartialRepaymentManager } from "@/components/PartialRepaymentManager";
 import {
   CheckCircle,
