@@ -24,7 +24,7 @@ import {
 import { useP2PLending } from "@/hooks/useP2PLending";
 import { LoanStatus } from "@/lib/contracts";
 import { useAllLoansWithStatus, ProcessedLoan } from "@/hooks/useSubgraphQuery";
-import { useRestMyLoansData } from "@/hooks/useRestApi";
+import { useRestMyLoansData, useLoansWithTokenInfo } from "@/hooks/useRestApi";
 import {
   useLivePriceComparison,
   LoanWithPriceComparison,
@@ -86,13 +86,21 @@ export default function MyLoansPage() {
     isLoanDefaulted,
   } = useP2PLending();
 
-  // Use REST API data instead of subgraph
+  // Use REST API data from new endpoints (loanCreateds, loanRepaids, loanLiquidateds)
   const {
-    loans: allLoans,
+    loans: rawLoans,
     loading: isLoadingRest,
     error: restError,
     refresh: refreshRestData,
   } = useRestMyLoansData();
+
+  // Enhance loans with dynamic token information
+  const {
+    loans: allLoans,
+    loading: isLoadingTokenInfo,
+    error: tokenInfoError,
+    refresh: refreshTokenInfo,
+  } = useLoansWithTokenInfo(rawLoans);
   
   // Keep subgraph as fallback for now
   const {
@@ -103,26 +111,57 @@ export default function MyLoansPage() {
   
   // Use REST data if available, otherwise fallback to subgraph
   const finalLoans = allLoans.length > 0 ? allLoans : subgraphLoans;
-  const finalLoading = isLoadingRest || (allLoans.length === 0 && isLoadingSubgraph);
-  const finalError = restError || (allLoans.length === 0 ? subgraphError : null);
+  const finalLoading = isLoadingRest || isLoadingTokenInfo || (allLoans.length === 0 && isLoadingSubgraph);
+  const finalError = restError || tokenInfoError || (allLoans.length === 0 ? subgraphError : null);
   
   console.log("MyLoans - REST loans:", allLoans);
   console.log("MyLoans - Subgraph loans:", subgraphLoans);
   console.log("MyLoans - Final loans:", finalLoans);
+  console.log("MyLoans - User address:", address);
+  console.log("MyLoans - Final loans structure:", finalLoans.map(loan => ({
+    id: loan.id?.toString(),
+    lender: loan.lender,
+    borrower: loan.borrower,
+    status: loan.status,
+    amount: loan.amount?.toString(),
+    tokenAddress: loan.tokenAddress,
+    tokenInfo: loan.tokenInfo,
+    collateralAddress: loan.collateralAddress,
+    collateralInfo: loan.collateralInfo
+  })));
+
+  // Helper function to normalize addresses (remove extra zeros)
+  const normalizeAddress = (addr: string): string => {
+    if (!addr) return "";
+    // Remove leading zeros but keep the 0x prefix
+    return "0x" + addr.slice(2).replace(/^0+/, "").toLowerCase();
+  };
 
   // Filter loans by user role
   const lenderLoans = React.useMemo(() => {
     if (!address) return [];
-    return finalLoans.filter(
-      (loan) => loan.lender.toLowerCase() === address.toLowerCase()
-    );
+    const normalizedUserAddress = normalizeAddress(address);
+    const filtered = finalLoans.filter((loan) => {
+      if (!loan.lender) return false;
+      const normalizedLenderAddress = normalizeAddress(loan.lender);
+      console.log("Comparing lender:", normalizedLenderAddress, "with user:", normalizedUserAddress);
+      return normalizedLenderAddress === normalizedUserAddress;
+    });
+    console.log("MyLoans - Lender loans filtered:", filtered.length, "from", finalLoans.length);
+    return filtered;
   }, [finalLoans, address]);
 
   const borrowerLoans = React.useMemo(() => {
     if (!address) return [];
-    return finalLoans.filter(
-      (loan) => loan.borrower.toLowerCase() === address.toLowerCase()
-    );
+    const normalizedUserAddress = normalizeAddress(address);
+    const filtered = finalLoans.filter((loan) => {
+      if (!loan.borrower) return false;
+      const normalizedBorrowerAddress = normalizeAddress(loan.borrower);
+      console.log("Comparing borrower:", normalizedBorrowerAddress, "with user:", normalizedUserAddress);
+      return normalizedBorrowerAddress === normalizedUserAddress;
+    });
+    console.log("MyLoans - Borrower loans filtered:", filtered.length, "from", finalLoans.length);
+    return filtered;
   }, [finalLoans, address]);
 
   // Get live price comparison data
@@ -205,6 +244,24 @@ export default function MyLoansPage() {
       const formattedAmount = tokenInfo
         ? ethers.formatUnits(loan.amount, tokenInfo.decimals)
         : ethers.formatEther(loan.amount);
+      
+      // Debug log for zero amounts and timestamps
+      if (loan.amount === 0n || loan.amount.toString() === "0") {
+        console.log("Warning: Loan has zero amount:", loan.id.toString());
+      }
+      
+      // Debug log for date issues
+      console.log("Loan date debug:", {
+        loanId: loan.id.toString(),
+        startTime: loan.startTime.toString(),
+        startTimeDate: new Date(Number(loan.startTime) * 1000),
+        duration: loan.duration.toString(),
+        durationDays: Number(loan.duration) / (24 * 60 * 60),
+        endTime: (loan.startTime + loan.duration).toString(),
+        endTimeDate: new Date(Number(loan.startTime + loan.duration) * 1000),
+        currentTime: currentTime.toString(),
+        currentTimeDate: new Date(Number(currentTime) * 1000)
+      });
 
       const formattedCollateralAmount = collateralInfo
         ? ethers.formatUnits(loan.collateralAmount, collateralInfo.decimals)
@@ -256,6 +313,7 @@ export default function MyLoansPage() {
   // Refresh all data
   const refreshAllData = () => {
     refreshRestData();
+    refreshTokenInfo();
     refreshLenderPrices();
     refreshBorrowerPrices();
   };
@@ -836,9 +894,9 @@ export default function MyLoansPage() {
         <Alert variant={"default"}>
           <AlertCircle className="h-4 w-4 " color="red" />
           <AlertTitle className="font-bold">
-            Note: Loan data is fetched from a subgraph and may take a few
-            minutes to update after transactions , Try refreshing the page. We
-            are working on improving this experience. Thanks for your patience!
+            Note: Loan data is now fetched from our REST API endpoints. If you don't see your loans, 
+            try refreshing the page. The system aggregates data from blockchain events and may take 
+            a moment to sync. Thanks for your patience!
           </AlertTitle>
         </Alert>
       </div>

@@ -1034,6 +1034,7 @@ export default function CreateLoanOfferPage() {
                       </Card>
                     )}
 
+
                   {/* Risk Management Parameters - Compact */}
                   {recommendedParams &&
                     selectedLoanToken &&

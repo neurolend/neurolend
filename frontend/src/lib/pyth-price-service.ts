@@ -71,9 +71,12 @@ class PythPriceService {
     }
 
     try {
+      // Remove 0x prefix from feed ID for API call
+      const normalizedFeedId = priceFeedId.startsWith('0x') ? priceFeedId.slice(2) : priceFeedId;
+      
       // Fetch price data from Hermes REST API
       const response = await fetch(
-        `${this.HERMES_ENDPOINT}/v2/updates/price/latest?ids[]=${priceFeedId}`
+        `${this.HERMES_ENDPOINT}/v2/updates/price/latest?ids[]=${normalizedFeedId}`
       );
 
       if (!response.ok) {
@@ -86,7 +89,14 @@ class PythPriceService {
         throw new Error(`No price data found for ${tokenSymbol}`);
       }
 
-      const priceData = data.parsed[0];
+      // Find price data using normalized feedId (remove 0x prefix if present)
+      const priceData = data.parsed.find((p: HermesPriceData) => 
+        p.id === (priceFeedId.startsWith('0x') ? priceFeedId.slice(2) : priceFeedId)
+      );
+      
+      if (!priceData) {
+        throw new Error(`No price data found for feed ID ${priceFeedId}`);
+      }
       const price = this.formatHermesPrice(priceData, priceFeedId);
 
       // Cache the result
@@ -132,7 +142,8 @@ class PythPriceService {
     }
 
     try {
-      const feedIds = priceFeeds.map((p) => p.feedId);
+      // Remove 0x prefix from feed IDs for API call
+      const feedIds = priceFeeds.map((p) => p.feedId.startsWith('0x') ? p.feedId.slice(2) : p.feedId);
       const idsQuery = feedIds.map((id) => `ids[]=${id}`).join("&");
 
       // Fetch price data from Hermes REST API
@@ -147,8 +158,10 @@ class PythPriceService {
       const data = await response.json();
 
       priceFeeds.forEach(({ symbol, feedId }) => {
+        // Normalize feedId for comparison (remove 0x prefix if present)
+        const normalizedFeedId = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
         const priceData = data.parsed?.find(
-          (p: HermesPriceData) => p.id === feedId
+          (p: HermesPriceData) => p.id === normalizedFeedId
         );
 
         if (priceData) {

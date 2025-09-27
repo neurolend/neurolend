@@ -19,7 +19,20 @@ const eslintConfig = [
       "build/**",
       "next-env.d.ts",
     ],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
+
+  // Allow `any` only in specific files (e.g., tutorial exercises)
+  {
+    files: ["**/total-typescript/**"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 ];
-
-export default eslintConfig;

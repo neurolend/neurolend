@@ -245,7 +245,7 @@ export function useCollateralCalculation(
         2
       );
 
-      setCalculation({
+      const calculationResult = {
         // Base unit values (for internal calculations)
         minCollateralAmountRaw,
         currentRatioRaw,
@@ -266,7 +266,9 @@ export function useCollateralCalculation(
           exchangeRate,
           minCollateralValueUSD: minCollateralValueUSDFormatted,
         },
-      });
+      };
+
+      setCalculation(calculationResult);
     } catch (error) {
       console.error("Error calculating collateral:", error);
       setCalculation(null);

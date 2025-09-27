@@ -45,7 +45,7 @@ export function Navigation() {
     },
     {
       href: "/orderbook",
-      label: "Order Book",
+      label: "Trade",
       icon: BookOpen,
     },
     {

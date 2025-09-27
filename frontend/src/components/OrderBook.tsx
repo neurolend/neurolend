@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -28,9 +28,8 @@ import {
   DollarSign,
   Clock,
 } from "lucide-react";
-import { useP2PLending } from "@/hooks/useP2PLending";
+import { useRestOffersData, convertRestLoanToProcessedLoan, useLoansWithTokenInfo } from "@/hooks/useRestApi";
 import { ethers } from "ethers";
-import { getTokenByAddress } from "@/config/tokens";
 
 interface OrderBookProps {
   selectedToken?: string;
@@ -66,177 +65,119 @@ interface LoanRequest {
 }
 
 export function OrderBook({ selectedToken, onOrderSelect }: OrderBookProps) {
+  // Use REST API data instead of contract calls
   const {
-    address,
-    isConnected,
-    activeLoanOfferIds,
-    activeBorrowRequestIds,
-    isLoadingOffers,
-    isLoadingRequests,
-    getLoan,
-    refetchOffers,
-    refetchRequests,
-  } = useP2PLending();
-  const [isLoading, setIsLoading] = useState(true);
-  const [loanOffers, setLoanOffers] = useState<LoanOffer[]>([]);
-  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
+    loans: rawRestLoans,
+    loading: isLoadingRest,
+    error: restError,
+    refresh: refreshRestData,
+  } = useRestOffersData();
+
+  // Convert and enhance loans with token info
+  const processedLoans = useMemo(() => 
+    rawRestLoans.map(convertRestLoanToProcessedLoan), 
+    [rawRestLoans]
+  );
+
+  const {
+    loans: enhancedLoans,
+    loading: isLoadingTokenInfo,
+    error: tokenInfoError,
+    refresh: refreshTokenInfo,
+  } = useLoansWithTokenInfo(processedLoans);
+
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Add refresh trigger state
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  // Process loans into offers and requests
+  const { loanOffers, loanRequests } = useMemo(() => {
+    if (!enhancedLoans || enhancedLoans.length === 0) {
+      return { loanOffers: [], loanRequests: [] };
+    }
 
-  // Fetch real data from contract
-  useEffect(() => {
-    const fetchOrderBookData = async () => {
-      if (!isConnected) {
-        setIsLoading(false);
-        return;
-      }
+    const offers: LoanOffer[] = [];
+    const requests: LoanRequest[] = [];
 
-      // Use the loading states from the hook
-      if (isLoadingOffers || isLoadingRequests) {
-        setIsLoading(true);
-        return;
-      }
+    enhancedLoans.forEach((loan) => {
+      // Only include pending loans
+      if (loan.status !== "Pending") return;
 
-      setIsLoading(true);
+      const tokenInfo = loan.tokenInfo;
+      const collateralInfo = loan.collateralInfo;
 
-      try {
-        const offers: LoanOffer[] = [];
-        const requests: LoanRequest[] = [];
+      // Format amounts using token decimals
+      const formattedAmount = tokenInfo?.decimals 
+        ? ethers.formatUnits(loan.amount || "0", tokenInfo.decimals)
+        : loan.amount || "0";
+      
+      const formattedCollateralAmount = collateralInfo?.decimals
+        ? ethers.formatUnits(loan.collateralAmount || "0", collateralInfo.decimals)
+        : loan.collateralAmount || "0";
 
-        // Process loan offers if available
-        if (activeLoanOfferIds && activeLoanOfferIds.length > 0) {
-          for (const offerId of activeLoanOfferIds) {
-            try {
-              const loan = await getLoan(offerId);
-
-              // Only include pending loan offers (lender exists, borrower is zero address)
-              if (
-                loan &&
-                loan.status === 0 &&
-                loan.lender !== ethers.ZeroAddress &&
-                loan.borrower === ethers.ZeroAddress
-              ) {
-                const tokenInfo = getTokenByAddress(loan.tokenAddress);
-                const collateralInfo = getTokenByAddress(
-                  loan.collateralAddress
-                );
-
-                offers.push({
-                  id: loan.id.toString(),
-                  lender: loan.lender,
-                  tokenAddress: loan.tokenAddress,
-                  amount: ethers.formatUnits(
-                    loan.amount,
-                    tokenInfo?.decimals || 18
-                  ),
-                  interestRate: Number(loan.interestRate), // Already in basis points
-                  duration: Number(loan.duration) / (24 * 60 * 60), // Convert seconds to days
-                  collateralAddress: loan.collateralAddress,
-                  collateralAmount: ethers.formatUnits(
-                    loan.collateralAmount,
-                    collateralInfo?.decimals || 18
-                  ),
-                  liquidityUSD: "$0.00", // TODO: Calculate based on token prices
-                  tokenInfo,
-                  collateralInfo,
-                });
-              }
-            } catch (error) {
-              console.error(`Error fetching loan ${offerId}:`, error);
-            }
-          }
-        }
-
-        // Process borrow requests if available
-        if (activeBorrowRequestIds && activeBorrowRequestIds.length > 0) {
-          for (const requestId of activeBorrowRequestIds) {
-            try {
-              const loan = await getLoan(requestId);
-
-              // Only include pending borrow requests (borrower exists, lender is zero address)
-              if (
-                loan &&
-                loan.status === 0 &&
-                loan.borrower !== ethers.ZeroAddress &&
-                loan.lender === ethers.ZeroAddress
-              ) {
-                const tokenInfo = getTokenByAddress(loan.tokenAddress);
-                const collateralInfo = getTokenByAddress(
-                  loan.collateralAddress
-                );
-
-                requests.push({
-                  id: loan.id.toString(),
-                  borrower: loan.borrower,
-                  tokenAddress: loan.tokenAddress,
-                  amount: ethers.formatUnits(
-                    loan.amount,
-                    tokenInfo?.decimals || 18
-                  ),
-                  maxInterestRate: Number(loan.interestRate), // Already in basis points
-                  duration: Number(loan.duration) / (24 * 60 * 60), // Convert seconds to days
-                  collateralAddress: loan.collateralAddress,
-                  collateralAmount: ethers.formatUnits(
-                    loan.collateralAmount,
-                    collateralInfo?.decimals || 18
-                  ),
-                  liquidityUSD: "$0.00", // TODO: Calculate based on token prices
-                  tokenInfo,
-                  collateralInfo,
-                });
-              }
-            } catch (error) {
-              console.error(`Error fetching request ${requestId}:`, error);
-            }
-          }
-        }
-
+      // Check if it's a lend offer (has lender, no borrower)
+      if (loan.lender && loan.lender !== ethers.ZeroAddress && 
+          (!loan.borrower || loan.borrower === ethers.ZeroAddress)) {
+        
         // Filter by selected token if specified
-        const filteredOffers = selectedToken
-          ? offers.filter((offer) => offer.tokenInfo?.symbol === selectedToken)
-          : offers;
-
-        const filteredRequests = selectedToken
-          ? requests.filter(
-              (request) => request.tokenInfo?.symbol === selectedToken
-            )
-          : requests;
-
-        // Sort offers by interest rate (ascending - best rates first)
-        filteredOffers.sort((a, b) => a.interestRate - b.interestRate);
-
-        // Sort requests by max interest rate (descending - highest rates first)
-        filteredRequests.sort((a, b) => b.maxInterestRate - a.maxInterestRate);
-
-        setLoanOffers(filteredOffers);
-        setLoanRequests(filteredRequests);
-        setLastUpdated(new Date());
-      } catch (error) {
-        console.error("Error fetching order book data:", error);
-      } finally {
-        setIsLoading(false);
+        if (!selectedToken || tokenInfo?.symbol === selectedToken) {
+          offers.push({
+            id: loan.id,
+            lender: loan.lender,
+            tokenAddress: loan.tokenAddress,
+            amount: formattedAmount,
+            interestRate: loan.interestRate || 0,
+            duration: loan.duration || 0,
+            collateralAddress: loan.collateralAddress,
+            collateralAmount: formattedCollateralAmount,
+            liquidityUSD: "$0.00", // TODO: Calculate based on token prices
+            tokenInfo,
+            collateralInfo,
+          });
+        }
       }
-    };
+      
+      // Check if it's a borrow request (has borrower, no lender)
+      else if (loan.borrower && loan.borrower !== ethers.ZeroAddress && 
+               (!loan.lender || loan.lender === ethers.ZeroAddress)) {
+        
+        // Filter by selected token if specified
+        if (!selectedToken || tokenInfo?.symbol === selectedToken) {
+          requests.push({
+            id: loan.id,
+            borrower: loan.borrower,
+            tokenAddress: loan.tokenAddress,
+            amount: formattedAmount,
+            maxInterestRate: loan.interestRate || 0,
+            duration: loan.duration || 0,
+            collateralAddress: loan.collateralAddress,
+            collateralAmount: formattedCollateralAmount,
+            liquidityUSD: "$0.00", // TODO: Calculate based on token prices
+            tokenInfo,
+            collateralInfo,
+          });
+        }
+      }
+    });
 
-    fetchOrderBookData();
-  }, [
-    selectedToken,
-    isConnected,
-    activeLoanOfferIds,
-    activeBorrowRequestIds,
-    isLoadingOffers,
-    isLoadingRequests,
-    getLoan,
-    refreshTrigger,
-  ]);
+    // Sort offers by interest rate (ascending - best rates first)
+    offers.sort((a, b) => a.interestRate - b.interestRate);
+
+    // Sort requests by max interest rate (descending - highest rates first)
+    requests.sort((a, b) => b.maxInterestRate - a.maxInterestRate);
+
+    return { loanOffers: offers, loanRequests: requests };
+  }, [enhancedLoans, selectedToken]);
+
+  // Update last updated timestamp when data changes
+  useEffect(() => {
+    if (enhancedLoans.length > 0) {
+      setLastUpdated(new Date());
+    }
+  }, [enhancedLoans]);
 
   const handleRefresh = () => {
-    // Trigger refetch from the hook and local refresh
-    refetchOffers();
-    refetchRequests();
-    setRefreshTrigger((prev) => prev + 1);
+    // Trigger refetch from REST API
+    refreshRestData();
+    refreshTokenInfo();
   };
 
   const formatRate = (basisPoints: number) => {
@@ -246,6 +187,8 @@ export function OrderBook({ selectedToken, onOrderSelect }: OrderBookProps) {
   const formatDuration = (days: number) => {
     return `${days}d`;
   };
+
+  const isLoading = isLoadingRest || isLoadingTokenInfo;
 
   if (isLoading) {
     return (
@@ -416,13 +359,8 @@ export function OrderBook({ selectedToken, onOrderSelect }: OrderBookProps) {
               <div className="text-sm font-bold">
                 {loanOffers.length > 0 && loanRequests.length > 0
                   ? `${
-                      ((formatRate(
-                        loanOffers[loanOffers.length - 1]?.interestRate || 0
-                      ) as any) +
-                        (formatRate(
-                          loanRequests[0]?.maxInterestRate || 0
-                        ) as any)) /
-                      2
+                      ((parseFloat(formatRate(loanOffers[loanOffers.length - 1]?.interestRate || 0)) +
+                        parseFloat(formatRate(loanRequests[0]?.maxInterestRate || 0))) / 2).toFixed(2)
                     }%`
                   : "—"}
               </div>
@@ -432,10 +370,8 @@ export function OrderBook({ selectedToken, onOrderSelect }: OrderBookProps) {
               <div className="text-sm font-bold">
                 {loanOffers.length > 0 && loanRequests.length > 0
                   ? `${
-                      (formatRate(
-                        loanOffers[loanOffers.length - 1]?.interestRate || 0
-                      ) as any) -
-                      (formatRate(loanRequests[0]?.maxInterestRate || 0) as any)
+                      Math.abs(parseFloat(formatRate(loanOffers[loanOffers.length - 1]?.interestRate || 0)) -
+                      parseFloat(formatRate(loanRequests[0]?.maxInterestRate || 0))).toFixed(2)
                     }%`
                   : "—"}
               </div>

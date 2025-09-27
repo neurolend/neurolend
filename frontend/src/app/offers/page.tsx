@@ -22,10 +22,10 @@ import {
 } from "@/components/ui/table";
 import { useP2PLending } from "@/hooks/useP2PLending";
 import { Loan, LoanStatus } from "@/lib/contracts";
-import { ZEROG_MAINNET_CONFIG } from "@/config/0g-chain";
 import {
   useRestOffersData,
   convertRestLoanToProcessedLoan,
+  useLoansWithTokenInfo,
 } from "@/hooks/useRestApi";
 import {
   useLivePriceComparison,
@@ -46,7 +46,13 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { ethers } from "ethers";
-import { getTokenByAddress } from "@/config/tokens";
+
+// Helper function to normalize addresses (remove leading zeros)
+function normalizeAddress(address: string): string {
+  if (!address) return "";
+  // Remove leading zeros but keep the 0x prefix
+  return ("0x" + address.slice(2).replace(/^0+/, "")).toLowerCase();
+}
 
 interface TokenInfo {
   name: string;
@@ -54,46 +60,18 @@ interface TokenInfo {
   decimals: number;
 }
 
-interface LoanOfferWithDetails extends LoanWithPriceComparison {
+interface EnhancedLoanWithPrices extends LoanWithPriceComparison {
+  tokenInfo?: TokenInfo;
+  collateralInfo?: TokenInfo;
+}
+
+interface LoanOfferWithDetails extends EnhancedLoanWithPrices {
   formattedAmount: string;
   formattedCollateralAmount: string;
   formattedInterestRate: number;
   formattedDuration: number;
   statusText: string;
-  tokenInfo?: TokenInfo;
-  collateralInfo?: TokenInfo;
 }
-
-// Function to fetch token information
-const fetchTokenInfo = async (
-  tokenAddress: string
-): Promise<TokenInfo | null> => {
-  try {
-    const provider = new ethers.JsonRpcProvider(
-      ZEROG_MAINNET_CONFIG.rpcUrls.default.http[0]
-    );
-    const tokenContract = new ethers.Contract(
-      tokenAddress,
-      [
-        "function name() view returns (string)",
-        "function symbol() view returns (string)",
-        "function decimals() view returns (uint8)",
-      ],
-      provider
-    );
-
-    const [name, symbol, decimals] = await Promise.all([
-      tokenContract.name(),
-      tokenContract.symbol(),
-      tokenContract.decimals(),
-    ]);
-
-    return { name, symbol, decimals: Number(decimals) };
-  } catch (error) {
-    console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-    return null;
-  }
-};
 
 export default function OffersPage() {
   const {
@@ -105,9 +83,9 @@ export default function OffersPage() {
     address,
   } = useP2PLending();
 
-  // Use REST API data instead of GraphQL
+  // Use REST API data from new endpoints
   const {
-    loans: restLoans,
+    loans: rawRestLoans,
     stats: protocolStats,
     loading: isLoadingRest,
     error: restError,
@@ -115,11 +93,19 @@ export default function OffersPage() {
   } = useRestOffersData();
 
   // Convert REST loans to ProcessedLoan format for compatibility
-  const pendingLoans = React.useMemo(() => {
-    return restLoans.map(convertRestLoanToProcessedLoan);
-  }, [restLoans]);
+  const processedLoans = React.useMemo(() => {
+    return rawRestLoans.map(convertRestLoanToProcessedLoan);
+  }, [rawRestLoans]);
 
-  // Get live price comparison data
+  // Enhance loans with dynamic token information
+  const {
+    loans: enhancedLoans,
+    loading: isLoadingTokenInfo,
+    error: tokenInfoError,
+    refresh: refreshTokenInfo,
+  } = useLoansWithTokenInfo(processedLoans);
+
+  // Get live price comparison data using enhanced loans
   const {
     loans: loansWithPrices,
     loading: isLoadingPrices,
@@ -127,7 +113,7 @@ export default function OffersPage() {
     refreshPrices,
     lastUpdated,
     priceChangeStats,
-  } = useLivePriceComparison(pendingLoans, {
+  } = useLivePriceComparison(enhancedLoans, {
     refreshInterval: 120000, // 2 minutes
     enableAutoRefresh: true,
   });
@@ -139,7 +125,7 @@ export default function OffersPage() {
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    if (isLoadingRest || isLoadingPrices) {
+    if (isLoadingRest || isLoadingTokenInfo || isLoadingPrices) {
       timeoutId = setTimeout(() => {
         setShowStuckMessage(true);
       }, 10000); // 10 seconds
@@ -152,13 +138,15 @@ export default function OffersPage() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isLoadingRest, isLoadingPrices]);
+  }, [isLoadingRest, isLoadingTokenInfo, isLoadingPrices]);
 
   // Format loans with token information for display
   const formattedLoans = React.useMemo(() => {
     return loansWithPrices.map((loan) => {
-      const tokenInfo = getTokenByAddress(loan.tokenAddress);
-      const collateralInfo = getTokenByAddress(loan.collateralAddress);
+      // Cast to enhanced loan type to access token info
+      const enhancedLoan = loan as EnhancedLoanWithPrices;
+      const tokenInfo = enhancedLoan.tokenInfo;
+      const collateralInfo = enhancedLoan.collateralInfo;
 
       const formattedAmount = tokenInfo
         ? ethers.formatUnits(loan.amount, tokenInfo.decimals)
@@ -189,7 +177,7 @@ export default function OffersPage() {
       return;
     }
 
-    if (loan.lender.toLowerCase() === address.toLowerCase()) {
+    if (normalizeAddress(loan.lender) === normalizeAddress(address)) {
       alert("You cannot accept your own loan offer");
       return;
     }
@@ -213,7 +201,7 @@ export default function OffersPage() {
       return;
     }
 
-    if (loan.lender.toLowerCase() !== address.toLowerCase()) {
+    if (normalizeAddress(loan.lender) !== normalizeAddress(address)) {
       alert("You can only cancel your own loan offers");
       return;
     }
@@ -234,6 +222,7 @@ export default function OffersPage() {
   const handleRefresh = () => {
     refreshPrices();
     refreshRestData();
+    refreshTokenInfo();
   };
 
   // const calculateTotalAPR = (interestRate: bigint) => {
@@ -265,9 +254,9 @@ export default function OffersPage() {
           <Button
             onClick={handleRefresh}
             variant="outline"
-            disabled={isLoadingRest || isLoadingPrices}
+            disabled={isLoadingRest || isLoadingTokenInfo || isLoadingPrices}
           >
-            {isLoadingRest || isLoadingPrices ? (
+            {isLoadingRest || isLoadingTokenInfo || isLoadingPrices ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -279,19 +268,21 @@ export default function OffersPage() {
 
       {/* Transaction Progress - Now handled by TransactionModal */}
 
-      {(restError || pricesError) && (
+      {(restError || tokenInfoError || pricesError) && (
         <Alert className="mb-6" variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             {restError && `Failed to load loan data: ${restError}`}
-            {restError && pricesError && " | "}
+            {restError && (tokenInfoError || pricesError) && " | "}
+            {tokenInfoError && `Failed to load token info: ${tokenInfoError}`}
+            {tokenInfoError && pricesError && " | "}
             {pricesError && `Failed to load prices: ${pricesError}`}
           </AlertDescription>
         </Alert>
       )}
 
       {/* Stuck Loading Message */}
-      {showStuckMessage && (isLoadingRest || isLoadingPrices) && (
+      {showStuckMessage && (isLoadingRest || isLoadingTokenInfo || isLoadingPrices) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <Card className="w-96 mx-4">
             <CardContent className="pt-6 text-center">
@@ -302,7 +293,7 @@ export default function OffersPage() {
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
                   The page seems to be stuck loading. This might be due to
-                  network issues or the subgraph being slow.
+                  network issues or the API being slow.
                 </p>
               </div>
               <div className="space-y-2">
@@ -326,7 +317,7 @@ export default function OffersPage() {
         </div>
       )}
 
-      {isLoadingRest || isLoadingPrices ? (
+      {isLoadingRest || isLoadingTokenInfo || isLoadingPrices ? (
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-4">
@@ -666,8 +657,8 @@ export default function OffersPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {loan.lender.toLowerCase() ===
-                          address?.toLowerCase() ? (
+                          {normalizeAddress(loan.lender) ===
+                          normalizeAddress(address || "") ? (
                             <div className="space-y-2">
                               <Badge
                                 variant="outline"

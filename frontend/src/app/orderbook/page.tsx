@@ -42,6 +42,7 @@ import { TokenSelector, TokenSelectorRef } from "@/components/TokenSelector";
 import { OrderBook } from "@/components/OrderBook";
 import { useP2PLending, LoanOfferFormData } from "@/hooks/useP2PLending";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { useRestOffersData, useRestStats } from "@/hooks/useRestApi";
 import { ethers } from "ethers";
 import {
   TokenInfo,
@@ -67,6 +68,19 @@ export default function OrderBookPage() {
     isConnected,
     address,
   } = useP2PLending();
+
+  // Get market data from REST API
+  const {
+    loans: marketLoans,
+    loading: isLoadingMarketData,
+    error: marketDataError,
+  } = useRestOffersData();
+
+  const {
+    stats: apiStats,
+    loading: isLoadingStats,
+    error: statsError,
+  } = useRestStats();
 
   // Refs for token selectors
   const loanTokenSelectorRef = useRef<TokenSelectorRef>(null);
@@ -354,19 +368,25 @@ export default function OrderBookPage() {
                 <div className="hidden lg:flex items-center space-x-6 ml-8">
                   <div className="text-center">
                     <div className="text-xs text-muted-foreground">
-                      Mid Rate
+                      Avg APR
                     </div>
-                    <div className="text-lg font-bold text-primary">6.12%</div>
+                    <div className="text-lg font-bold text-primary">
+                      {isLoadingStats ? "..." : apiStats?.averageInterestRate ? `${(parseFloat(apiStats.averageInterestRate) / 100).toFixed(2)}%` : "—"}
+                    </div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-muted-foreground">Spread</div>
-                    <div className="text-lg font-bold">0.25%</div>
+                    <div className="text-xs text-muted-foreground">Active Loans</div>
+                    <div className="text-lg font-bold">
+                      {isLoadingStats ? "..." : apiStats?.totalActiveLoans || "0"}
+                    </div>
                   </div>
                   <div className="text-center">
                     <div className="text-xs text-muted-foreground">
-                      24h Volume
+                      Total Volume
                     </div>
-                    <div className="text-lg font-bold">$1.2M</div>
+                    <div className="text-lg font-bold">
+                      {isLoadingStats ? "..." : apiStats?.totalLoanVolumeUSD ? `$${parseFloat(apiStats.totalLoanVolumeUSD).toLocaleString()}` : "$0"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -555,8 +575,8 @@ export default function OrderBookPage() {
                       </div>
                       {formData.amount && selectedLoanToken && (
                         <div className="text-sm text-muted-foreground">
-                          ≈ $4,997.60{" "}
                           {/* TODO: Calculate based on live prices */}
+                          ≈ $—
                         </div>
                       )}
                     </div>
@@ -718,29 +738,35 @@ export default function OrderBookPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Total Borrow
+                    Total Borrowed
                   </span>
-                  <span className="text-sm font-medium">$1,000,000.00</span>
+                  <span className="text-sm font-medium">
+                    {isLoadingStats ? "..." : apiStats?.totalLoanVolumeUSD ? `$${parseFloat(apiStats.totalLoanVolumeUSD).toLocaleString()}` : "$0.00"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Bad Debt
+                    Total Collateral
+                  </span>
+                  <span className="text-sm font-medium">
+                    {isLoadingStats ? "..." : "$0.00"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Total Loans
+                  </span>
+                  <span className="text-sm font-medium">
+                    {isLoadingStats ? "..." : apiStats?.totalLoansCreated || "0"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Active Loans
                   </span>
                   <span className="text-sm font-medium text-green-600">
-                    $0.00
+                    {isLoadingStats ? "..." : apiStats?.totalActiveLoans || "0"}
                   </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Liquidation LTV
-                  </span>
-                  <span className="text-sm font-medium">85.00%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Liquidation Penalty
-                  </span>
-                  <span className="text-sm font-medium">4.50%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Oracle</span>
@@ -772,7 +798,7 @@ export default function OrderBookPage() {
                         {selectedLoanToken?.symbol || "Tokens"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        ≈ $4,997.60
+                        ≈ $—
                       </div>
                     </div>
 
@@ -814,7 +840,7 @@ export default function OrderBookPage() {
                         {selectedCollateralToken?.symbol || "Tokens"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        ≈ $0.00
+                        ≈ $—
                       </div>
                     </div>
                   </div>

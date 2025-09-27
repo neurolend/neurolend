@@ -17,15 +17,23 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useP2PLending } from "@/hooks/useP2PLending";
 import { LoanStatus } from "@/lib/contracts";
-import {
-  useAllLoansWithStatus,
-  ProcessedLoan,
-  invalidateSubgraphCache,
-} from "@/hooks/useSubgraphQuery";
+import { useRestMyLoansData, useLoansWithTokenInfo } from "@/hooks/useRestApi";
 import {
   useLivePriceComparison,
   LoanWithPriceComparison,
 } from "@/hooks/useLivePriceComparison";
+
+// Extended interface to include token info
+interface TokenInfo {
+  name: string;
+  symbol: string;
+  decimals: number;
+}
+
+interface EnhancedLoanWithPrices extends LoanWithPriceComparison {
+  tokenInfo?: TokenInfo;
+  collateralInfo?: TokenInfo;
+}
 import { LoanHealthManager } from "@/components/LoanHealthManager";
 import { PartialRepaymentManager } from "@/components/PartialRepaymentManager";
 import {
@@ -52,7 +60,6 @@ import {
   Zap,
 } from "lucide-react";
 import { ethers } from "ethers";
-import { getTokenByAddress } from "@/config/tokens";
 
 interface TokenInfo {
   name: string;
@@ -104,17 +111,26 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
     getLoanRepaymentInfo,
   } = useP2PLending();
 
-  // Use subgraph data to get all loans
+  // Use REST API data to get all loans
   const {
-    loans: allLoans,
-    loading: isLoadingSubgraph,
-    error: subgraphError,
-  } = useAllLoansWithStatus();
+    loans: rawLoans,
+    loading: isLoadingRest,
+    error: restError,
+    refresh: refreshRestData,
+  } = useRestMyLoansData();
+
+  // Enhance loans with dynamic token information
+  const {
+    loans: enhancedLoans,
+    loading: isLoadingTokenInfo,
+    error: tokenInfoError,
+    refresh: refreshTokenInfo,
+  } = useLoansWithTokenInfo(rawLoans);
 
   // Find the specific loan
   const loan = React.useMemo(() => {
-    return allLoans.find((l) => l.id === loanId);
-  }, [allLoans, loanId]);
+    return enhancedLoans.find((l) => l.id === loanId);
+  }, [enhancedLoans, loanId]);
 
   // Get live price comparison data for this specific loan
   const {
@@ -148,15 +164,15 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
 
   // Format loan details for display
   const formatLoanDetails = useCallback(
-    (loan: LoanWithPriceComparison): LoanWithDetails => {
+    (loan: EnhancedLoanWithPrices): LoanWithDetails => {
       const currentTime = BigInt(Math.floor(Date.now() / 1000));
       const interest = calculateInterest(loan, currentTime);
       const totalRepayment = calculateTotalRepayment(loan, currentTime);
       const isOverdue = isLoanDefaulted(loan, currentTime);
 
-      // Get token info from config
-      const tokenInfo = getTokenByAddress(loan.tokenAddress);
-      const collateralInfo = getTokenByAddress(loan.collateralAddress);
+      // Use enhanced token info from the loan object (fetched dynamically)
+      const tokenInfo = loan.tokenInfo;
+      const collateralInfo = loan.collateralInfo;
 
       // Calculate time remaining
       let timeRemaining = "N/A";
@@ -229,7 +245,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
   );
 
   const loanDetails = React.useMemo(() => {
-    return loanWithPrices ? formatLoanDetails(loanWithPrices) : null;
+    return loanWithPrices ? formatLoanDetails(loanWithPrices as EnhancedLoanWithPrices) : null;
   }, [loanWithPrices, formatLoanDetails]);
 
   // Fetch additional loan data
@@ -258,7 +274,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    if (isLoadingSubgraph || isLoadingPrices) {
+    if (isLoadingRest || isLoadingTokenInfo || isLoadingPrices) {
       timeoutId = setTimeout(() => {
         setShowStuckMessage(true);
       }, 10000); // 10 seconds
@@ -271,11 +287,13 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
         clearTimeout(timeoutId);
       }
     };
-  }, [isLoadingSubgraph, isLoadingPrices]);
+  }, [isLoadingRest, isLoadingTokenInfo, isLoadingPrices]);
 
   // Refresh all data
   const refreshAllData = () => {
     refreshPrices();
+    refreshRestData();
+    refreshTokenInfo();
     fetchAdditionalData();
   };
 
@@ -286,8 +304,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
     try {
       setSelectedAction("repay");
       await repayLoan(loanDetails.id, loanDetails);
-      // Invalidate cache to force fresh data
-      invalidateSubgraphCache();
+      // Refresh data after successful repayment
       refreshAllData();
     } catch (error) {
       console.error("Failed to repay loan:", error);
@@ -302,8 +319,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
     try {
       setSelectedAction("liquidate");
       await liquidateLoan(loanDetails.id);
-      // Invalidate cache to force fresh data
-      invalidateSubgraphCache();
+      // Refresh data after successful liquidation
       refreshAllData();
     } catch (error) {
       console.error("Failed to liquidate loan:", error);
@@ -318,8 +334,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
     try {
       setSelectedAction("cancel");
       await cancelLoanOffer(loanDetails.id);
-      // Invalidate cache to force fresh data
-      invalidateSubgraphCache();
+      // Refresh data after successful cancellation
       refreshAllData();
     } catch (error) {
       console.error("Failed to cancel loan offer:", error);
@@ -339,11 +354,11 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
   };
 
   // Loading state
-  if (isLoadingSubgraph || isLoadingPrices || !loanDetails) {
+  if (isLoadingRest || isLoadingTokenInfo || isLoadingPrices || !loanDetails) {
     return (
       <div className="container mx-auto px-4 py-8">
         {/* Stuck Loading Message */}
-        {showStuckMessage && (isLoadingSubgraph || isLoadingPrices) && (
+        {showStuckMessage && (isLoadingRest || isLoadingTokenInfo || isLoadingPrices) && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
             <Card className="w-96 mx-4">
               <CardContent className="pt-6 text-center">
@@ -354,7 +369,7 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
                   </h3>
                   <p className="text-muted-foreground text-sm mb-4">
                     The page seems to be stuck loading. This might be due to
-                    network issues or the subgraph being slow.
+                    network issues or the API being slow.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -417,11 +432,20 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
     );
   }
 
+  // Helper function to normalize addresses (remove extra zeros)
+  const normalizeAddress = (addr: string): string => {
+    if (!addr) return "";
+    // Remove leading zeros but keep the 0x prefix
+    return "0x" + addr.slice(2).replace(/^0+/, "").toLowerCase();
+  };
+
   // Check if user is involved in this loan
   const isLender =
-    address && loanDetails.lender.toLowerCase() === address.toLowerCase();
+    address && loanDetails.lender && 
+    normalizeAddress(loanDetails.lender) === normalizeAddress(address);
   const isBorrower =
-    address && loanDetails.borrower.toLowerCase() === address.toLowerCase();
+    address && loanDetails.borrower && 
+    normalizeAddress(loanDetails.borrower) === normalizeAddress(address);
   const userRole = isLender ? "lender" : isBorrower ? "borrower" : null;
 
   if (!isConnected || !userRole) {
@@ -517,10 +541,16 @@ export default function LoanDetailsPage({ params }: LoanDetailsPageProps) {
       )}
 
       {/* Error/Success Alerts */}
-      {transactionState.isError && (
+      {(transactionState.isError || restError || tokenInfoError) && (
         <Alert className="mb-6" variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{transactionState.error}</AlertDescription>
+          <AlertDescription>
+            {transactionState.error}
+            {transactionState.error && (restError || tokenInfoError) && " | "}
+            {restError && `Failed to load loan data: ${restError}`}
+            {restError && tokenInfoError && " | "}
+            {tokenInfoError && `Failed to load token info: ${tokenInfoError}`}
+          </AlertDescription>
         </Alert>
       )}
 
