@@ -3,7 +3,8 @@
  * Service for fetching real-time price data from Pyth Network
  */
 
-import { PYTH_CONFIG } from "@/config/0g-chain";
+import { ethers } from "ethers";
+import { PYTH_CONFIG, ZEROG_MAINNET_CONFIG } from "@/config/0g-chain";
 import { getPythPriceFeedBySymbol } from "@/config/tokens";
 
 export interface PythPrice {

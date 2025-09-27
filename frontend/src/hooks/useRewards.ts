@@ -53,7 +53,6 @@ export function useRewards() {
 
     // Formatters
     formatDreamAmount: (amount: bigint) => "0.0000",
-    formatNeuroAmount: (amount: bigint) => "0.0000",
     formatAPR: (apr: bigint) => "0.00",
 
     // Loading states
