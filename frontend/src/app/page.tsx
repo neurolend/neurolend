@@ -1,5 +1,7 @@
 "use client";
 
+import { generateFinancialProductSchema, StructuredData } from "@/lib/seo";
+
 import Link from "next/link";
 import {
   Card,
@@ -28,6 +30,16 @@ import {
   HelpCircle,
   BookOpen,
 } from "lucide-react";
+
+const financialProductSchema = generateFinancialProductSchema({
+  name: "neurolend P2P Crypto Lending",
+  description:
+    "Peer-to-peer cryptocurrency lending platform offering secure loans and high-yield earning opportunities",
+  url: process.env.NEXT_PUBLIC_SITE_URL || "https://neurolend.finance",
+  provider: "neurolend Finance",
+  category: "Permissionless Lending/Borrowing",
+  interestRate: "Up to 150% APY",
+});
 
 export default function Home() {
   const { isConnected, activeLoanOfferIds, lenderLoans, borrowerLoans } =
@@ -72,7 +84,7 @@ export default function Home() {
       icon: Zap,
       title: "Lightning-Fast Execution",
       description:
-        "Built on ZeroG L1 for near-instant transactions and minimal fees, making DeFi lending accessible to everyone.",
+        "Built on Somnia L1 for near-instant transactions and minimal fees, making DeFi lending accessible to everyone.",
       color: "text-yellow-600",
     },
     {
@@ -97,6 +109,7 @@ export default function Home() {
 
   return (
     <>
+      <StructuredData data={financialProductSchema} />
       <div className="relative">
         {/* Hero Section */}
         <section className="relative pt-20 pb-32 overflow-hidden">
@@ -104,7 +117,7 @@ export default function Home() {
             {/* Hero Badge */}
             <div className="inline-flex items-center space-x-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-8 border border-primary/20">
               <Sparkles className="h-4 w-4" />
-              <span>Built on ZeroG</span>
+              <span>Built on Somnia L1 Testnet</span>
             </div>
 
             {/* Main Heading */}

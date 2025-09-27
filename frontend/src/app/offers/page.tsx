@@ -22,17 +22,15 @@ import {
 } from "@/components/ui/table";
 import { useP2PLending } from "@/hooks/useP2PLending";
 import { Loan, LoanStatus } from "@/lib/contracts";
-import { zerog_TESTNET_CONFIG } from "@/lib/contracts";
+import { ZEROG_MAINNET_CONFIG } from "@/config/0g-chain";
 import {
-  useAllLoansWithStatus,
-  ProcessedLoan,
-  useProtocolStatsCollection,
-} from "@/hooks/useSubgraphQuery";
+  useRestOffersData,
+  convertRestLoanToProcessedLoan,
+} from "@/hooks/useRestApi";
 import {
   useLivePriceComparison,
   LoanWithPriceComparison,
 } from "@/hooks/useLivePriceComparison";
-import { useRewards } from "@/hooks/useRewards";
 import { TransactionModal } from "@/components/TransactionModal";
 import {
   CheckCircle,
@@ -72,7 +70,7 @@ const fetchTokenInfo = async (
 ): Promise<TokenInfo | null> => {
   try {
     const provider = new ethers.JsonRpcProvider(
-      zerog_TESTNET_CONFIG.rpcUrls.default.http[0]
+      ZEROG_MAINNET_CONFIG.rpcUrls.default.http[0]
     );
     const tokenContract = new ethers.Contract(
       tokenAddress,
@@ -107,17 +105,19 @@ export default function OffersPage() {
     address,
   } = useP2PLending();
 
-  // Use subgraph data instead of RPC calls
+  // Use REST API data instead of GraphQL
   const {
-    loans: allLoans,
-    loading: isLoadingSubgraph,
-    error: subgraphError,
-  } = useAllLoansWithStatus();
+    loans: restLoans,
+    stats: protocolStats,
+    loading: isLoadingRest,
+    error: restError,
+    refresh: refreshRestData,
+  } = useRestOffersData();
 
-  // Filter for pending loans only
+  // Convert REST loans to ProcessedLoan format for compatibility
   const pendingLoans = React.useMemo(() => {
-    return allLoans.filter((loan) => loan.status === 0); // Pending status
-  }, [allLoans]);
+    return restLoans.map(convertRestLoanToProcessedLoan);
+  }, [restLoans]);
 
   // Get live price comparison data
   const {
@@ -132,24 +132,14 @@ export default function OffersPage() {
     enableAutoRefresh: true,
   });
 
-  // Get rewards data
-  const {
-    currentRewardsAPR,
-    formatAPR,
-    rewardsSystemAvailable,
-    globalRewardStats,
-  } = useRewards();
-
   const [selectedLoanId, setSelectedLoanId] = useState<bigint | null>(null);
   const [showStuckMessage, setShowStuckMessage] = useState(false);
-  const { data: protocolStats, loading: isLoadingProtocolStats } =
-    useProtocolStatsCollection();
 
   // Show stuck loading message after 10 seconds
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    if (isLoadingSubgraph || isLoadingPrices) {
+    if (isLoadingRest || isLoadingPrices) {
       timeoutId = setTimeout(() => {
         setShowStuckMessage(true);
       }, 10000); // 10 seconds
@@ -162,7 +152,7 @@ export default function OffersPage() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isLoadingSubgraph, isLoadingPrices]);
+  }, [isLoadingRest, isLoadingPrices]);
 
   // Format loans with token information for display
   const formattedLoans = React.useMemo(() => {
@@ -209,6 +199,7 @@ export default function OffersPage() {
       await acceptLoanOffer(loan.id, loan);
       // Refresh the data after successful acceptance
       refreshPrices();
+      refreshRestData();
     } catch (error) {
       console.error("Failed to accept loan offer:", error);
     } finally {
@@ -232,6 +223,7 @@ export default function OffersPage() {
       await cancelLoanOffer(loan.id);
       // Refresh the data after successful cancellation
       refreshPrices();
+      refreshRestData();
     } catch (error) {
       console.error("Failed to cancel loan offer:", error);
     } finally {
@@ -241,14 +233,7 @@ export default function OffersPage() {
 
   const handleRefresh = () => {
     refreshPrices();
-  };
-
-  // Calculate rewards APR for display
-  const calculateRewardsAPR = () => {
-    if (!rewardsSystemAvailable || !currentRewardsAPR || !globalRewardStats) {
-      return "0.00";
-    }
-    return formatAPR(currentRewardsAPR);
+    refreshRestData();
   };
 
   // const calculateTotalAPR = (interestRate: bigint) => {
@@ -280,9 +265,9 @@ export default function OffersPage() {
           <Button
             onClick={handleRefresh}
             variant="outline"
-            disabled={isLoadingSubgraph || isLoadingPrices}
+            disabled={isLoadingRest || isLoadingPrices}
           >
-            {isLoadingSubgraph || isLoadingPrices ? (
+            {isLoadingRest || isLoadingPrices ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -294,19 +279,19 @@ export default function OffersPage() {
 
       {/* Transaction Progress - Now handled by TransactionModal */}
 
-      {(subgraphError || pricesError) && (
+      {(restError || pricesError) && (
         <Alert className="mb-6" variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {subgraphError && `Failed to load loan data: ${subgraphError}`}
-            {subgraphError && pricesError && " | "}
+            {restError && `Failed to load loan data: ${restError}`}
+            {restError && pricesError && " | "}
             {pricesError && `Failed to load prices: ${pricesError}`}
           </AlertDescription>
         </Alert>
       )}
 
       {/* Stuck Loading Message */}
-      {showStuckMessage && (isLoadingSubgraph || isLoadingPrices) && (
+      {showStuckMessage && (isLoadingRest || isLoadingPrices) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <Card className="w-96 mx-4">
             <CardContent className="pt-6 text-center">
@@ -341,7 +326,7 @@ export default function OffersPage() {
         </div>
       )}
 
-      {isLoadingSubgraph || isLoadingPrices ? (
+      {isLoadingRest || isLoadingPrices ? (
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-4">
@@ -383,16 +368,9 @@ export default function OffersPage() {
                   <span className="text-sm font-medium">Total Volume</span>
                 </div>
                 <p className="text-2xl font-bold">
-                  {/* {loanOffers
-                    .reduce(
-                      (sum, loan) => sum + parseFloat(loan.formattedAmount),
-                      0
-                    )
-                    .toFixed(2)}{" "} */}
-                  {Number(
-                    protocolStats?.protocolStats_collection?.[0]
-                      ?.totalLoanVolumeUSD
-                  ).toFixed(2)}{" "}
+                  {protocolStats?.totalLoanVolumeUSD
+                    ? Number(protocolStats.totalLoanVolumeUSD).toFixed(2)
+                    : "0.00"}{" "}
                   $
                 </p>
               </CardContent>
@@ -425,10 +403,7 @@ export default function OffersPage() {
                   <span className="text-sm font-medium">Active Offers</span>
                 </div>
                 <p className="text-2xl font-bold">
-                  {
-                    protocolStats?.protocolStats_collection?.[0]
-                      ?.totalLoansCreated
-                  }
+                  {protocolStats?.totalLoansCreated || 0}
                 </p>
               </CardContent>
             </Card>
@@ -570,7 +545,10 @@ export default function OffersPage() {
                             </div>
                             <p className="text-xs text-muted-foreground">
                               {loan.tokenInfo?.name ||
-                                `${loan.tokenAddress.slice(0, 6)}...${loan.tokenAddress.slice(-4)}`}
+                                `${loan.tokenAddress.slice(
+                                  0,
+                                  6
+                                )}...${loan.tokenAddress.slice(-4)}`}
                             </p>
                           </div>
                         </TableCell>
@@ -584,8 +562,8 @@ export default function OffersPage() {
                                     loan.priceChangeIndicator.isPositive
                                       ? "bg-green-50 text-green-700 border-green-200"
                                       : loan.loanTokenPriceDirection === "down"
-                                        ? "bg-red-50 text-red-700 border-red-200"
-                                        : "bg-gray-50 text-gray-700 border-gray-200"
+                                      ? "bg-red-50 text-red-700 border-red-200"
+                                      : "bg-gray-50 text-gray-700 border-gray-200"
                                   }`}
                                 >
                                   {loan.loanTokenPriceDirection === "up" && (
@@ -659,7 +637,10 @@ export default function OffersPage() {
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {loan.collateralInfo?.name ||
-                                `${loan.collateralAddress.slice(0, 6)}...${loan.collateralAddress.slice(-4)}`}
+                                `${loan.collateralAddress.slice(
+                                  0,
+                                  6
+                                )}...${loan.collateralAddress.slice(-4)}`}
                             </p>
                           </div>
                         </TableCell>
@@ -736,9 +717,9 @@ export default function OffersPage() {
                               selectedLoanId === loan.id
                                 ? "Approving..."
                                 : transactionState.step === "accepting" &&
-                                    selectedLoanId === loan.id
-                                  ? "Accepting..."
-                                  : "Accept"}
+                                  selectedLoanId === loan.id
+                                ? "Accepting..."
+                                : "Accept"}
                             </Button>
                           )}
                         </TableCell>

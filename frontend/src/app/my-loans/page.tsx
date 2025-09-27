@@ -24,6 +24,7 @@ import {
 import { useP2PLending } from "@/hooks/useP2PLending";
 import { LoanStatus } from "@/lib/contracts";
 import { useAllLoansWithStatus, ProcessedLoan } from "@/hooks/useSubgraphQuery";
+import { useRestMyLoansData } from "@/hooks/useRestApi";
 import {
   useLivePriceComparison,
   LoanWithPriceComparison,
@@ -85,27 +86,44 @@ export default function MyLoansPage() {
     isLoanDefaulted,
   } = useP2PLending();
 
-  // Use subgraph data instead of RPC calls
+  // Use REST API data instead of subgraph
   const {
     loans: allLoans,
+    loading: isLoadingRest,
+    error: restError,
+    refresh: refreshRestData,
+  } = useRestMyLoansData();
+  
+  // Keep subgraph as fallback for now
+  const {
+    loans: subgraphLoans,
     loading: isLoadingSubgraph,
     error: subgraphError,
   } = useAllLoansWithStatus();
+  
+  // Use REST data if available, otherwise fallback to subgraph
+  const finalLoans = allLoans.length > 0 ? allLoans : subgraphLoans;
+  const finalLoading = isLoadingRest || (allLoans.length === 0 && isLoadingSubgraph);
+  const finalError = restError || (allLoans.length === 0 ? subgraphError : null);
+  
+  console.log("MyLoans - REST loans:", allLoans);
+  console.log("MyLoans - Subgraph loans:", subgraphLoans);
+  console.log("MyLoans - Final loans:", finalLoans);
 
   // Filter loans by user role
   const lenderLoans = React.useMemo(() => {
     if (!address) return [];
-    return allLoans.filter(
+    return finalLoans.filter(
       (loan) => loan.lender.toLowerCase() === address.toLowerCase()
     );
-  }, [allLoans, address]);
+  }, [finalLoans, address]);
 
   const borrowerLoans = React.useMemo(() => {
     if (!address) return [];
-    return allLoans.filter(
+    return finalLoans.filter(
       (loan) => loan.borrower.toLowerCase() === address.toLowerCase()
     );
-  }, [allLoans, address]);
+  }, [finalLoans, address]);
 
   // Get live price comparison data
   const {
@@ -136,7 +154,7 @@ export default function MyLoansPage() {
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    if (isLoadingSubgraph || isLoadingLenderPrices || isLoadingBorrowerPrices) {
+    if (finalLoading || isLoadingLenderPrices || isLoadingBorrowerPrices) {
       timeoutId = setTimeout(() => {
         setShowStuckMessage(true);
       }, 10000); // 10 seconds
@@ -149,7 +167,7 @@ export default function MyLoansPage() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isLoadingSubgraph, isLoadingLenderPrices, isLoadingBorrowerPrices]);
+  }, [finalLoading, isLoadingLenderPrices, isLoadingBorrowerPrices]);
   // Format loan details for display
   const formatLoanDetails = useCallback(
     (loan: LoanWithPriceComparison): LoanWithDetails => {
@@ -237,6 +255,7 @@ export default function MyLoansPage() {
 
   // Refresh all data
   const refreshAllData = () => {
+    refreshRestData();
     refreshLenderPrices();
     refreshBorrowerPrices();
   };
@@ -578,7 +597,7 @@ export default function MyLoansPage() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Please connect your wallet to zerog L1 testnet to view your
+                Please connect your wallet to Somnia L1 testnet to view your
                 loans.
               </AlertDescription>
             </Alert>
@@ -604,13 +623,13 @@ export default function MyLoansPage() {
           onClick={refreshAllData}
           variant="outline"
           disabled={
-            isLoadingSubgraph ||
+            finalLoading ||
             isLoadingLenderPrices ||
             isLoadingBorrowerPrices
           }
           className="btn-premium"
         >
-          {isLoadingSubgraph ||
+          {finalLoading ||
           isLoadingLenderPrices ||
           isLoadingBorrowerPrices ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -665,13 +684,13 @@ export default function MyLoansPage() {
       )}
 
       {/* Error Alert */}
-      {(transactionState.isError || subgraphError) && (
+      {(transactionState.isError || finalError) && (
         <Alert className="mb-6" variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             {transactionState.error}
-            {transactionState.error && subgraphError && " | "}
-            {subgraphError && `Failed to load loan data: ${subgraphError}`}
+            {transactionState.error && finalError && " | "}
+            {finalError && `Failed to load loan data: ${finalError}`}
           </AlertDescription>
         </Alert>
       )}
@@ -697,7 +716,7 @@ export default function MyLoansPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">
-                  {isLoadingSubgraph ? "..." : lenderLoans.length}
+                  {finalLoading ? "..." : lenderLoans.length}
                 </p>
                 <p className="text-sm font-medium text-foreground">As Lender</p>
                 <p className="text-xs text-muted-foreground">
@@ -716,7 +735,7 @@ export default function MyLoansPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">
-                  {isLoadingSubgraph ? "..." : borrowerLoans.length}
+                  {finalLoading ? "..." : borrowerLoans.length}
                 </p>
                 <p className="text-sm font-medium text-foreground">
                   As Borrower
@@ -776,7 +795,7 @@ export default function MyLoansPage() {
 
       {/* Stuck Loading Message */}
       {showStuckMessage &&
-        (isLoadingSubgraph ||
+        (finalLoading ||
           isLoadingLenderPrices ||
           isLoadingBorrowerPrices) && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -837,7 +856,7 @@ export default function MyLoansPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoadingSubgraph || isLoadingLenderPrices ? (
+          {finalLoading || isLoadingLenderPrices ? (
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="flex items-center space-x-4">
@@ -868,7 +887,7 @@ export default function MyLoansPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoadingSubgraph || isLoadingBorrowerPrices ? (
+          {finalLoading || isLoadingBorrowerPrices ? (
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="flex items-center space-x-4">

@@ -1,5 +1,12 @@
 "use client";
 
+import { generateBreadcrumbSchema, StructuredData } from "@/lib/seo";
+
+const breadcrumbSchema = generateBreadcrumbSchema([
+  { name: "Home", url: "/" },
+  { name: "Create Loan Offer", url: "/create" },
+]);
+
 import { useState, useRef } from "react";
 import {
   Card,
@@ -112,21 +119,8 @@ export default function CreateLoanOfferPage() {
     error: loanBalanceError,
   });
 
-  const {
-    formattedBalance: collateralTokenBalance,
-    isLoading: isLoadingCollateralBalance,
-    error: collateralBalanceError,
-    refreshBalance: refreshCollateralBalance,
-    balance: rawCollateralBalance,
-  } = useTokenBalance(
-    selectedCollateralToken?.address || null,
-    address || null,
-    selectedCollateralToken?.decimals || 18,
-    {
-      refreshInterval: 30000,
-      enableAutoRefresh: !!selectedCollateralToken && !!address,
-    }
-  );
+  // Note: We don't check collateral token balance for lenders
+  // Lenders only provide the loan amount, borrowers provide collateral when accepting
   const [recommendedParams, setRecommendedParams] = useState<{
     minCollateralRatio: number;
     liquidationThreshold: number;
@@ -199,16 +193,8 @@ export default function CreateLoanOfferPage() {
     }
   };
 
-  // Handle max button click for collateral amount
-  const handleMaxCollateralAmount = () => {
-    if (selectedCollateralToken && rawCollateralBalance) {
-      const maxAmount = ethers.formatUnits(
-        rawCollateralBalance,
-        selectedCollateralToken.decimals
-      );
-      handleInputChange("collateralAmount", maxAmount);
-    }
-  };
+  // Note: No max collateral amount handler needed for lenders
+  // Lenders specify required collateral, they don't provide it
 
   // Handle auto-fill minimum collateral with precision buffer
   const handleAutoFillMinCollateral = (
@@ -371,19 +357,8 @@ export default function CreateLoanOfferPage() {
       )
     ) {
       errors.collateralAmount = `Maximum ${selectedCollateralToken.decimals} decimal places allowed for ${selectedCollateralToken.symbol}`;
-    } else if (
-      selectedCollateralToken &&
-      rawCollateralBalance &&
-      parseFloat(formData.collateralAmount) >
-        parseFloat(
-          ethers.formatUnits(
-            rawCollateralBalance,
-            selectedCollateralToken.decimals
-          )
-        )
-    ) {
-      errors.collateralAmount = `Insufficient balance. You have ${collateralTokenBalance} ${selectedCollateralToken.symbol}`;
     }
+    // Note: No balance check for collateral - lenders specify requirements, don't provide collateral
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -448,7 +423,7 @@ export default function CreateLoanOfferPage() {
       loanTokenSelectorRef.current?.refreshBalance();
       collateralTokenSelectorRef.current?.refreshBalance();
       refreshLoanBalance();
-      refreshCollateralBalance();
+      // Note: No need to refresh collateral balance for lenders
     } catch (error) {
       console.error("Failed to create loan offer:", error);
 
@@ -466,6 +441,14 @@ export default function CreateLoanOfferPage() {
           errorMessage = "Insufficient funds to create this loan offer.";
         } else if (error.message.includes("User rejected")) {
           errorMessage = "Transaction was cancelled by user.";
+        } else if (
+          error.message.includes("could not coalesce error") ||
+          error.message.includes("no matching receipts found") ||
+          error.message.includes("receipt unavailable")
+        ) {
+          errorMessage =
+            "Transaction was submitted but confirmation is delayed due to network issues. " +
+            "Please check your wallet or the block explorer in a few minutes.";
         } else {
           errorMessage = `Transaction failed: ${error.message}`;
         }
@@ -488,6 +471,7 @@ export default function CreateLoanOfferPage() {
 
   return (
     <>
+      <StructuredData data={breadcrumbSchema} />
       <div className="">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
@@ -726,8 +710,8 @@ export default function CreateLoanOfferPage() {
                         Collateral Requirements
                       </CardTitle>
                       <CardDescription>
-                        Define what collateral borrowers must provide to secure
-                        the loan
+                        Specify what collateral borrowers must provide when
+                        accepting your loan offer
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -745,56 +729,19 @@ export default function CreateLoanOfferPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label
-                              htmlFor="collateralAmount"
-                              className="text-base font-medium"
-                            >
-                              Collateral Amount
-                            </Label>
-                            {selectedCollateralToken && address && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <Wallet className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-muted-foreground">
-                                  Balance:
-                                </span>
-                                {isLoadingCollateralBalance ? (
-                                  <RefreshCw className="h-3 w-3 animate-spin text-primary" />
-                                ) : collateralBalanceError ? (
-                                  <span className="text-destructive">
-                                    Error
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span className="font-medium text-primary">
-                                      {collateralTokenBalance}{" "}
-                                      {selectedCollateralToken.symbol}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={handleMaxCollateralAmount}
-                                      className="h-6 px-2 text-xs text-primary hover:text-primary-foreground hover:bg-primary"
-                                      disabled={
-                                        !rawCollateralBalance ||
-                                        rawCollateralBalance === "0"
-                                      }
-                                    >
-                                      MAX
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          <Label
+                            htmlFor="collateralAmount"
+                            className="text-base font-medium"
+                          >
+                            Required Collateral Amount
+                          </Label>
                           <Input
                             id="collateralAmount"
                             type="text"
                             placeholder={
                               selectedCollateralToken
-                                ? `e.g., 1500 (max ${selectedCollateralToken.decimals} decimals)`
-                                : "1500"
+                                ? `Required from borrower, e.g., 1500 (max ${selectedCollateralToken.decimals} decimals)`
+                                : "Required from borrower, e.g., 1500"
                             }
                             value={formData.collateralAmount}
                             onChange={(e) =>
@@ -1193,6 +1140,8 @@ export default function CreateLoanOfferPage() {
 
           {/* Right Sidebar - Quick Actions & Summary */}
           <div className="xl:col-span-1 space-y-6">
+            {/* Quick Mint Tokens Section */}
+
             {/* Loan Summary - Always visible when form has data */}
             {formData.amount && formData.interestRate && formData.duration && (
               <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20 sticky backdrop-blur-3xl top-20">
