@@ -28,7 +28,7 @@ export function Navigation() {
   const { isConnected, address } = useP2PLending();
   const {
     pendingRewards,
-    formatDreamAmount,
+    formatNeuroAmount,
     rewardsSystemAvailable,
     canClaimRewards,
   } = useRewards();
@@ -79,14 +79,14 @@ export function Navigation() {
             <div className="relative">
               <img
                 src="/logo.png"
-                alt="DreamLend Logo"
+                alt="neurolend Logo"
                 className=" w-20 h-20 text-primary transition-colors duration-300 group-hover:text-primary/80"
               />
               <div className="absolute -inset-1 bg-primary/20 rounded-full blur opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                DreamLend
+                neurolend
               </span>
               <Badge
                 variant="secondary"
@@ -160,7 +160,7 @@ export function Navigation() {
                         href={"/rewards"}
                         className="text-xs font-medium  text-purple-700 dark:text-purple-300"
                       >
-                        {formatDreamAmount(pendingRewards).slice(0, 6)} DREAM
+                        {formatNeuroAmount(pendingRewards).slice(0, 6)} NEURO
                       </Link>
                       {/* {canClaimRewards && (
                         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />

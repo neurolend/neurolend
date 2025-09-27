@@ -235,7 +235,7 @@ export default function Home() {
         <section className="py-16">
           <div>
             <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold mb-6">Why Choose DreamLend?</h2>
+              <h2 className="text-4xl font-bold mb-6">Why Choose neurolend?</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Built with institutional-grade security and luxury user
                 experience in mind
@@ -389,7 +389,7 @@ export default function Home() {
                 Need Help Getting Started?
               </h2>
               <p className="text-muted-foreground text-lg">
-                Explore our resources to learn more about DreamLend
+                Explore our resources to learn more about neurolend
               </p>
             </div>
 
@@ -405,7 +405,7 @@ export default function Home() {
                         How It Works
                       </h3>
                       <p className="text-muted-foreground">
-                        Step-by-step guide to lending and borrowing on DreamLend
+                        Step-by-step guide to lending and borrowing on neurolend
                       </p>
                     </div>
                     <ArrowRight className="h-4 w-4 mx-auto text-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -441,7 +441,7 @@ export default function Home() {
                 <CardHeader className="text-center">
                   <CardTitle className="text-2xl">Quick Actions</CardTitle>
                   <CardDescription className="text-lg">
-                    Jump right into lending or borrowing on DreamLend
+                    Jump right into lending or borrowing on neurolend
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

@@ -1,4 +1,4 @@
-// DreamLend Contract Configuration for zerog  Testnet
+// neurolend Contract Configuration for zerog  Testnet
 // Read contract address from environment (preferred for client: NEXT_PUBLIC_*, otherwise server-side)
 
 import { defineChain } from "viem";
