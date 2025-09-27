@@ -3,8 +3,7 @@
  * Service for fetching real-time price data from Pyth Network
  */
 
-import { ethers } from "ethers";
-import { PYTH_CONFIG, ZEROG_MAINNET_CONFIG } from "@/config/0g-chain";
+import { PYTH_CONFIG } from "@/config/0g-chain";
 import { getPythPriceFeedBySymbol } from "@/config/tokens";
 
 export interface PythPrice {
@@ -23,6 +22,16 @@ export interface PriceUpdateData {
   updateData: string[];
   updateFee: string;
   priceIds: string[];
+}
+
+interface HermesPriceData {
+  id: string;
+  price: {
+    price: string;
+    conf: string;
+    expo: number;
+    publish_time: number;
+  };
 }
 
 class PythPriceService {
@@ -136,8 +145,10 @@ class PythPriceService {
 
       const data = await response.json();
 
-      priceFeeds.forEach(({ symbol, feedId }, index) => {
-        const priceData = data.parsed?.find((p: any) => p.id === feedId);
+      priceFeeds.forEach(({ symbol, feedId }) => {
+        const priceData = data.parsed?.find(
+          (p: HermesPriceData) => p.id === feedId
+        );
 
         if (priceData) {
           const price = this.formatHermesPrice(priceData, feedId);
@@ -249,7 +260,10 @@ class PythPriceService {
   /**
    * Format Hermes API price data for consistent use
    */
-  private formatHermesPrice(priceData: any, feedId: string): PythPrice {
+  private formatHermesPrice(
+    priceData: HermesPriceData,
+    feedId: string
+  ): PythPrice {
     try {
       const price = priceData.price;
       const expo = price.expo;
