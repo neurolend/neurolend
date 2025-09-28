@@ -45,7 +45,7 @@ const faqs = [
       {
         question: "What is neurolend Finance?",
         answer:
-          "neurolend Finance is a peer-to-peer (P2P) cryptocurrency lending platform built on Somnia L1. It allows users to lend their crypto assets to earn interest or borrow crypto by providing collateral, all through secure smart contracts.",
+          "neurolend Finance is a peer-to-peer (P2P) cryptocurrency lending platform built on 0g. It allows users to lend their crypto assets to earn interest or borrow crypto by providing collateral, all through secure smart contracts.",
       },
       {
         question: "How do I get started with neurolend?",
@@ -159,7 +159,7 @@ const faqs = [
       {
         question: "How much are gas fees?",
         answer:
-          "Gas fees depend on network congestion and are paid to the blockchain network, not neurolend. Built on Somnia L1, our platform offers significantly lower gas fees compared to Ethereum mainnet.",
+          "Gas fees depend on network congestion and are paid to the blockchain network, not neurolend. Built on 0g, our platform offers significantly lower gas fees compared to Ethereum mainnet.",
       },
       {
         question: "Do I pay fees for cancelled offers?",
