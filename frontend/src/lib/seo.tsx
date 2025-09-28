@@ -31,7 +31,7 @@ const defaultKeywords = [
 const siteConfig = {
   name: "neurolend Finance",
   description:
-    "The future of decentralized lending. A peer-to-peer lending platform built on Somnia L1.",
+    "The future of decentralized lending. A peer-to-peer lending platform built on 0g.",
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://neurolend.finance",
   ogImage: "/og-image.png",
   twitterHandle: "@neurolendFi",
